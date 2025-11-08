@@ -183,17 +183,18 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
 
             tags = child.find("tags")
             if tags is not None:
-                match tags.text:
-                    case "todo_done":
-                        markdown_content += "- [x] "
-                    case "todo_unchecked":
-                        markdown_content += "- [ ] "
-                    case "title":
-                        markdown_content += "# " + converted_content + "\n\n"
-                    case None:
-                        markdown_content += f"# {title}\n\n"
-                    case _:
-                        logging.warning(f"⚠️  Unknown 'tags' tag ('{tags.text}') in file '{basket_xml_file}'!")
+                for tag in tags.text.split(';'):
+                    match tag:
+                        case "todo_done":
+                            markdown_content += "- [x] "
+                        case "todo_unchecked":
+                            markdown_content += "- [ ] "
+                        case "title":
+                            markdown_content += "# " + converted_content + "\n\n"
+                        case None:
+                            markdown_content += f"# {title}\n\n"
+                        case _:
+                            logging.warning(f"⚠️  Unknown tag '{tag}' from tags '{tags.text}' in file '{basket_xml_file}'!")
 
             if converted_content and tags is None or tags.text != "title":
                 markdown_content += f"{converted_content}\n"
