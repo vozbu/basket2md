@@ -33,8 +33,8 @@ import argparse
 # import json
 import logging
 import markdownify
+from bs4 import BeautifulSoup
 from pathlib import Path
-import re
 import xml.etree.ElementTree as ET
 
 
@@ -162,21 +162,21 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
                     continue
 
                 case 'image' | 'file':
-                    note_file = dir_path / content_tag.text
-                    if note_file.exists():
+                    note_file_path = dir_path / content_tag.text
+                    if note_file_path.exists():
                         obsidian_folder_path.mkdir(exist_ok=True)
-                        note_file.copy(obsidian_folder_path / content_tag.text, preserve_metadata=True)
+                        note_file_path.copy(obsidian_folder_path / content_tag.text, preserve_metadata=True)
                     else:
-                        logging.warning(f"⚠️  file '{note_file}' doesn't exist")
+                        logging.warning(f"⚠️  file '{note_file_path}' doesn't exist")
                     continue
 
                 case _:
                     logging.warning(f"⚠️  skipped unknown content type '{type}' in file '{basket_xml_file}'")
                     continue
 
-            note_file = dir_path / content_tag.text
+            note_file_path = dir_path / content_tag.text
 
-            title, html_content = parse_html_note(note_file)
+            title, html_content = parse_html_note(note_file_path)
             converted_content = convert_html_to_markdown(html_content)
             if not converted_content:
                 converted_content += "*Empty note*\n\n"
@@ -252,31 +252,33 @@ dir_name: {dir_name}
     return markdown_content
 
 
-def parse_html_note(html_file):
+def parse_html_note(html_file_path):
     """Parse HTML file with note."""
     try:
-        with open(html_file, 'r', encoding='utf-8') as f:
+        with open(html_file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
+        soup = BeautifulSoup(content, 'html.parser')
+
         # Extract title from <title> tag or file name
-        title_match = re.search(r'<title>(.*?)</title>', content, re.IGNORECASE | re.DOTALL)
-        if title_match:
-            title = title_match.group(1).strip()
+        title_tag = soup.find('title')
+        if title_tag and title_tag.get_text().strip():
+            title = title_tag.get_text().strip()
         else:
-            title = html_file.stem
+            title = html_file_path.stem
 
         # Extract note body
-        body_match = re.search(r'<body[^>]*>(.*?)</body>', content, re.IGNORECASE | re.DOTALL)
-        if body_match:
-            body_content = body_match.group(1)
+        body_tag = soup.find('body')
+        if body_tag:
+            body_content = body_tag.decode_contents()
         else:
             body_content = content
 
         return title, body_content
 
     except Exception as e:
-        print(f"⚠️ Error reading {html_file}: {e}")
-        return html_file.stem, ""
+        print(f"⚠️ Error reading {html_file_path}: {e}")
+        return html_file_path.stem, ""
 
 
 def convert_html_to_markdown(text):

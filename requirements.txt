@@ -1,1 +1,2 @@
 markdownify
+beautifulsoup4
