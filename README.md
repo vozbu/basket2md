@@ -79,3 +79,14 @@ Each generated Markdown file includes YAML frontmatter with metadata:
 The access time (atime) and modification time (mtime) of generated Markdown files and directories are set based on the collected dates:
 - For files: Access time is set to the `created` date if available, otherwise to the `updated` date; modification time is set to the `updated` date if available
 - For directories: Modification time is set to the latest `updated` date from all notes and subdirectories within that directory
+
+## What could be better
+
+### HTML formatting support
+
+Basket has some formatting made weird, parsers don't handle it well.
+
+### Titles detection
+
+Subnotes sometimes has titles in it not structured as titles in HTML files. It could be extracted with some
+kind of heuristics.

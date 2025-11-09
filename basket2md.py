@@ -208,26 +208,32 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
 
             title, html_content = parse_html_note(note_file_path)
             converted_content = convert_html_to_markdown(html_content)
+            if not title:
+                title = "Note"
             if not converted_content:
                 converted_content += "*Empty note*\n\n"
 
             tags = child.find("tags")
+            has_output = False
             if tags is not None:
                 for tag in tags.text.split(';'):
                     match tag:
                         case "todo_done":
-                            markdown_content += "- [x] "
+                            has_output = True
+                            markdown_content += f"- [x] {converted_content} \n"
                         case "todo_unchecked":
-                            markdown_content += "- [ ] "
+                            has_output = True
+                            markdown_content += f"- [ ] {converted_content} \n"
                         case "title":
-                            markdown_content += "# " + converted_content + "\n\n"
-                        case None:
-                            markdown_content += f"# {title}\n\n"
+                            has_output = True
+                            markdown_content += f"# {converted_content} \n\n"
                         case _:
+                            tag_unknown = True
                             logging.warning(f"⚠️  Unknown tag '{tag}' from tags '{tags.text}' in file '{basket_xml_file}'!")
 
-            if converted_content and tags is None or tags.text != "title":
-                markdown_content += f"{converted_content}\n"
+            if converted_content and not has_output:
+                markdown_content += f"# {title}\n\n"
+                markdown_content += f"{converted_content}\n\n"
 
             stats['notes_processed'] += 1
 
@@ -300,10 +306,9 @@ def parse_html_note(html_file_path):
 
         # Extract title from <title> tag or file name
         title_tag = soup.find('title')
+        title = None
         if title_tag and title_tag.get_text().strip():
             title = title_tag.get_text().strip()
-        else:
-            title = html_file_path.stem
 
         # Extract note body
         body_tag = soup.find('body')
