@@ -147,6 +147,7 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
     markdown_content = ""
     min_added = None
     max_lastmod = None
+    files_copied = 0
 
     for child in xml_node:
         if child.tag == 'note':
@@ -188,6 +189,7 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
                         obsidian_folder_path.mkdir(exist_ok=True)
                         note_file_path.copy(obsidian_folder_path / content_tag.text, preserve_metadata=True)
                         stats['files_copied'][note_file_path.suffix.lower()] += 1
+                        files_copied += 1
                     else:
                         logging.warning(f"⚠️  file '{note_file_path}' doesn't exist")
                     continue
@@ -224,8 +226,9 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
             stats['notes_processed'] += 1
 
         elif child.tag == 'group':
-            sub_content, sub_min, sub_max = process_notes_group(dir_path, basket_xml_file, child, obsidian_folder_path, stats)
+            sub_content, sub_min, sub_max, sub_files = process_notes_group(dir_path, basket_xml_file, child, obsidian_folder_path, stats)
             markdown_content += sub_content + '\n'
+            files_copied += sub_files
             if sub_min is not None:
                 min_added = min(min_added, sub_min) if min_added else sub_min
             if sub_max is not None:
@@ -234,7 +237,7 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
         else:
             logging.warning(f"⚠️  Unknown tag '{child.tag}' in file '{basket_xml_file}'!")
 
-    return markdown_content, min_added, max_lastmod
+    return markdown_content, min_added, max_lastmod, files_copied
 
 
 # basket_path - path to basket folder on FS.
@@ -243,7 +246,8 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
 def read_and_format_notes(basket_path, dir_name, obsidian_folder_path, stats):
     """Find all notes in specified Basket dir and renders them into one markdown file."""
 
-    default_return = "", None, None
+    # markdown_content, min_added, max_lastmod, files_copied
+    default_return = "", None, None, 0
 
     if dir_name is None:
         return default_return
@@ -268,9 +272,9 @@ def read_and_format_notes(basket_path, dir_name, obsidian_folder_path, stats):
     xml_notes = root.find('notes')
     if (xml_notes is None):
         print(f"⚠️  File {basket_xml} does not contain '<notes>' tag!")
-        return []
+        return default_return
 
-    content, min_added, max_lastmod = process_notes_group(dir_path, basket_xml, xml_notes, obsidian_folder_path, stats)
+    content, min_added, max_lastmod, files_copied = process_notes_group(dir_path, basket_xml, xml_notes, obsidian_folder_path, stats)
 
     frontmatter = f"""---
 source: KDE Basket
@@ -284,7 +288,7 @@ dir_name: {dir_name}
 
     markdown_content = frontmatter + content
 
-    return markdown_content, min_added, max_lastmod
+    return markdown_content, min_added, max_lastmod, files_copied
 
 
 def parse_html_note(html_file_path):
@@ -355,10 +359,11 @@ def write_note(content, filename, created=None, updated=None):
 def process_basket_item(basket_item, basket_path, current_obsidian_path, stats):
     """Recursive processing of Basket item."""
 
-    # If item has nested baskets, then:
-    # - All notes of this item go into file <folder_name>.md
-    # - For each child create a folder and process recursively there.
-    # If no children, then:
+    # If item has nested baskets or files to copy, then:
+    # - Create a folder for this item
+    # - All notes of this item go into file <folder_name>.md in that folder
+    # - For each child create a subfolder and process recursively there.
+    # If no children and no files, then:
     # - Don't create folder for this item, create note in parent root with item name,
     #   and put all found notes of this item there.
 
@@ -369,15 +374,19 @@ def process_basket_item(basket_item, basket_path, current_obsidian_path, stats):
 
     # Format notes in this Basket folder into one document
     notes_before = stats["notes_processed"]
-    content, min_added, max_lastmod = read_and_format_notes(basket_path, basket_item.dir, folder_path / safe_name, stats)
+    obsidian_folder_path = folder_path / safe_name
+    content, min_added, max_lastmod, files_copied = read_and_format_notes(basket_path, basket_item.dir, obsidian_folder_path, stats)
     notes_after = stats["notes_processed"]
     found_notes = notes_after - notes_before
     logging.info(f"  📄 Notes found: {found_notes}")
+    if (files_copied > 0):
+        logging.info(f"  📁 Files copied: {files_copied}")
 
+    create_folder = len(basket_item.children) > 0 or files_copied > 0
     max_child_updated = None
-    if len(basket_item.children) != 0:
+    if create_folder:
         # Create folder in Obsidian
-        folder_path = folder_path / safe_name
+        folder_path = obsidian_folder_path
         folder_path.mkdir(exist_ok=True)
         stats['folders_created'] += 1
 
@@ -396,7 +405,7 @@ def process_basket_item(basket_item, basket_path, current_obsidian_path, stats):
     if max_child_updated:
         overall_max = max(overall_max, max_child_updated) if overall_max else max_child_updated
 
-    if len(basket_item.children) != 0 and overall_max:
+    if create_folder and overall_max:
         os.utime(folder_path, (os.path.getatime(folder_path), overall_max.timestamp()))
 
     return overall_max
