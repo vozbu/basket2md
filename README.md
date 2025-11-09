@@ -57,6 +57,7 @@ Example:
 
 ### Note Types
 - **HTML notes**: Converted to Markdown using the `markdownify` library
+- **Text (.txt) files**: Converted to separate Markdown (.md) files with frontmatter metadata, instead of being copied as attachments
 - **Links**: Converted to Markdown link format `[title](url)`
 - **Images/Files**: Referenced files are copied to the output directory
 - **Todo items**: Converted to Markdown checkboxes (`- [x]` for done, `- [ ]` for unchecked)
