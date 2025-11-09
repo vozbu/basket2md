@@ -36,6 +36,7 @@ import markdownify
 from bs4 import BeautifulSoup
 from pathlib import Path
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 
 LOG_LEVEL_NOTICE = 25
@@ -142,6 +143,8 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
     """ Processes group of notes found in tag 'group' inside of basketN/.basket file. """
 
     markdown_content = ""
+    min_added = None
+    max_lastmod = None
 
     for child in xml_node:
         if child.tag == 'note':
@@ -151,6 +154,22 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
             if (content_tag is None):
                 logging.warning(f"⚠️  'content' tag not found in file '{basket_xml_file}'!")
                 continue
+
+            added_str = child.get('added')
+            if added_str:
+                try:
+                    added_dt = datetime.fromisoformat(added_str)
+                    min_added = min(min_added, added_dt) if min_added else added_dt
+                except ValueError:
+                    logging.warning(f"⚠️ Invalid 'added' date '{added_str}' in {basket_xml_file}")
+
+            lastmod_str = child.get('lastModification')
+            if lastmod_str:
+                try:
+                    lastmod_dt = datetime.fromisoformat(lastmod_str)
+                    max_lastmod = max(max_lastmod, lastmod_dt) if max_lastmod else lastmod_dt
+                except ValueError:
+                    logging.warning(f"⚠️ Invalid 'lastModification' date '{lastmod_str}' in {basket_xml_file}")
 
             match type:
                 case 'html':
@@ -202,13 +221,17 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
             stats['notes_processed'] += 1
 
         elif child.tag == 'group':
-            markdown_content += process_notes_group(dir_path, basket_xml_file, child, obsidian_folder_path, stats)
-            markdown_content += '\n'
+            sub_content, sub_min, sub_max = process_notes_group(dir_path, basket_xml_file, child, obsidian_folder_path, stats)
+            markdown_content += sub_content + '\n'
+            if sub_min is not None:
+                min_added = min(min_added, sub_min) if min_added else sub_min
+            if sub_max is not None:
+                max_lastmod = max(max_lastmod, sub_max) if max_lastmod else sub_max
 
         else:
             logging.warning(f"⚠️  Unknown tag '{child.tag}' in file '{basket_xml_file}'!")
 
-    return markdown_content
+    return markdown_content, min_added, max_lastmod
 
 
 # basket_path - path to basket folder on FS.
@@ -242,13 +265,19 @@ def read_and_format_notes(basket_path, dir_name, obsidian_folder_path, stats):
         print(f"⚠️  File {basket_xml} does not contain '<notes>' tag!")
         return []
 
-    markdown_content= f"""---
+    content, min_added, max_lastmod = process_notes_group(dir_path, basket_xml, xml_notes, obsidian_folder_path, stats)
+
+    frontmatter = f"""---
 source: KDE Basket
 dir_name: {dir_name}
----
-
 """
-    markdown_content += process_notes_group(dir_path, basket_xml, xml_notes, obsidian_folder_path, stats)
+    if min_added is not None:
+        frontmatter += f"created: {min_added.isoformat()}\n"
+    if max_lastmod is not None:
+        frontmatter += f"updated: {max_lastmod.isoformat()}\n"
+    frontmatter += "---\n\n"
+
+    markdown_content = frontmatter + content
 
     return markdown_content
 

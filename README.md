@@ -66,3 +66,10 @@ Example:
 - Processes nested note groups from Basket's XML structure
 - Maintains hierarchical organization in Obsidian
 - Creates separate Markdown files for each Basket folder
+
+### Frontmatter
+Each generated Markdown file includes YAML frontmatter with metadata:
+- `source`: Always set to "KDE Basket"
+- `dir_name`: The original Basket directory name
+- `created`: The earliest creation date (ISO format) from all notes in the group (if available)
+- `updated`: The latest modification date (ISO format) from all notes in the group (if available)
