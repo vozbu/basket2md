@@ -150,6 +150,8 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
     files_copied = 0
     txt_converted = 0
 
+    children_count = len(xml_node)
+
     for child in xml_node:
         if child.tag == 'note':
             type = child.get('type', '')
@@ -208,7 +210,7 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
 
             title, html_content = parse_html_note(note_file_path)
             converted_content = convert_html_to_markdown(html_content)
-            if not title:
+            if not title and children_count > 1:
                 title = "Note"
             if not converted_content:
                 converted_content += "*Empty note*\n\n"
@@ -232,7 +234,8 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
                             logging.warning(f"⚠️  Unknown tag '{tag}' from tags '{tags.text}' in file '{basket_xml_file}'!")
 
             if converted_content and not has_output:
-                markdown_content += f"# {title}\n\n"
+                if title:
+                    markdown_content += f"# {title}\n\n"
                 markdown_content += f"{converted_content}\n\n"
 
             stats['notes_processed'] += 1
