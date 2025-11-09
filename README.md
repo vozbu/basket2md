@@ -73,3 +73,8 @@ Each generated Markdown file includes YAML frontmatter with metadata:
 - `dir_name`: The original Basket directory name
 - `created`: The earliest creation date (ISO format) from all notes in the group (if available)
 - `updated`: The latest modification date (ISO format) from all notes in the group (if available)
+
+### File and Directory Timestamps
+The access time (atime) and modification time (mtime) of generated Markdown files and directories are set based on the collected dates:
+- For files: Access time is set to the `created` date if available, otherwise to the `updated` date; modification time is set to the `updated` date if available
+- For directories: Modification time is set to the latest `updated` date from all notes and subdirectories within that directory

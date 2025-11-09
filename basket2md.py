@@ -38,6 +38,7 @@ from collections import defaultdict
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from datetime import datetime
+import os
 
 
 LOG_LEVEL_NOTICE = 25
@@ -242,23 +243,25 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
 def read_and_format_notes(basket_path, dir_name, obsidian_folder_path, stats):
     """Find all notes in specified Basket dir and renders them into one markdown file."""
 
+    default_return = "", None, None
+
     if dir_name is None:
-        return []
+        return default_return
 
     dir_name = dir_name.rstrip('/')
 
     if not dir_name:
-        return []
+        return default_return
 
     dir_path = basket_path / dir_name
     if not dir_path.exists():
         print(f"⚠️ Folder not found: {dir_name}")
-        return []
+        return default_return
 
     basket_xml = dir_path / '.basket'
     if not basket_xml.exists():
         print(f"⚠️  File {basket_xml} not found!")
-        return []
+        return default_return
 
     tree = ET.parse(basket_xml)
     root = tree.getroot()
@@ -281,7 +284,7 @@ dir_name: {dir_name}
 
     markdown_content = frontmatter + content
 
-    return markdown_content
+    return markdown_content, min_added, max_lastmod
 
 
 def parse_html_note(html_file_path):
@@ -339,9 +342,13 @@ def sanitize_filename(name):
     return sanitized
 
 
-def write_note(content, filename):
+def write_note(content, filename, created=None, updated=None):
     with open(filename, 'w', encoding='utf-8') as f:
         f.write(content)
+    if updated or created:
+        atime = created.timestamp() if created else updated.timestamp()
+        mtime = updated.timestamp() if updated else atime
+        os.utime(filename, (atime, mtime))
     logging.info(f"  ✅ Created file: {filename}")
 
 
@@ -362,11 +369,12 @@ def process_basket_item(basket_item, basket_path, current_obsidian_path, stats):
 
     # Format notes in this Basket folder into one document
     notes_before = stats["notes_processed"]
-    content = read_and_format_notes(basket_path, basket_item.dir, folder_path / safe_name, stats)
+    content, min_added, max_lastmod = read_and_format_notes(basket_path, basket_item.dir, folder_path / safe_name, stats)
     notes_after = stats["notes_processed"]
     found_notes = notes_after - notes_before
     logging.info(f"  📄 Notes found: {found_notes}")
 
+    max_child_updated = None
     if len(basket_item.children) != 0:
         # Create folder in Obsidian
         folder_path = folder_path / safe_name
@@ -375,12 +383,23 @@ def process_basket_item(basket_item, basket_path, current_obsidian_path, stats):
 
         # Recursively process nested baskets
         for child in basket_item.children:
-            process_basket_item(child, basket_path, folder_path, stats)
+            child_max = process_basket_item(child, basket_path, folder_path, stats)
+            if child_max:
+                max_child_updated = max(max_child_updated, child_max) if max_child_updated else child_max
 
     # Write notes of this folder to folder_path
     if found_notes > 0:
         mdfile = folder_path / f"{safe_name}.md"
-        write_note(content, mdfile)
+        write_note(content, mdfile, created=min_added, updated=max_lastmod)
+
+    overall_max = max_lastmod
+    if max_child_updated:
+        overall_max = max(overall_max, max_child_updated) if overall_max else max_child_updated
+
+    if len(basket_item.children) != 0 and overall_max:
+        os.utime(folder_path, (os.path.getatime(folder_path), overall_max.timestamp()))
+
+    return overall_max
 
 
 def process_basket_structure(basket_path, obsidian_path):
