@@ -34,6 +34,7 @@ import argparse
 import logging
 import markdownify
 from bs4 import BeautifulSoup
+from collections import defaultdict
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -185,6 +186,7 @@ def process_notes_group(dir_path, basket_xml_file, xml_node, obsidian_folder_pat
                     if note_file_path.exists():
                         obsidian_folder_path.mkdir(exist_ok=True)
                         note_file_path.copy(obsidian_folder_path / content_tag.text, preserve_metadata=True)
+                        stats['files_copied'][note_file_path.suffix.lower()] += 1
                     else:
                         logging.warning(f"⚠️  file '{note_file_path}' doesn't exist")
                     continue
@@ -391,7 +393,8 @@ def process_basket_structure(basket_path, obsidian_path):
 
     stats = {
         'folders_created': 0,
-        'notes_processed': 0
+        'notes_processed': 0,
+        'files_copied': defaultdict(int)
     }
 
     logging.info("🔄 Starting structure creation...")
@@ -399,7 +402,7 @@ def process_basket_structure(basket_path, obsidian_path):
     # Process root folder and all nested ones
     process_basket_item(root_basket, basket_path, obsidian_path, stats)
 
-    return stats['folders_created'], stats['notes_processed']
+    return stats
 
 
 def main():
@@ -439,13 +442,21 @@ def main():
     # return
 
     # Perform import
-    folders_created, notes_processed = process_basket_structure(basket_path, obsidian_path)
+    stats = process_basket_structure(basket_path, obsidian_path)
+
+    folders_created = stats['folders_created']
+    notes_processed = stats['notes_processed']
+    total_files = sum(stats['files_copied'].values())
 
     logging.log(LOG_LEVEL_NOTICE, "")
     logging.log(LOG_LEVEL_NOTICE, "=" * 50)
     logging.log(LOG_LEVEL_NOTICE, "📊 Import results:")
     logging.log(LOG_LEVEL_NOTICE, f"✅ Folders-notes created: {folders_created}")
     logging.log(LOG_LEVEL_NOTICE, f"✅ Nested notes processed: {notes_processed}")
+    logging.log(LOG_LEVEL_NOTICE, f"✅ Files copied: {total_files}")
+
+    for ext, count in sorted(stats['files_copied'].items(), key=lambda x: x[1], reverse=True):
+        logging.log(LOG_LEVEL_NOTICE, f"  {ext}: {count}")
 
     if folders_created > 0:
         import_dir = obsidian_path / 'Basket-Import'
